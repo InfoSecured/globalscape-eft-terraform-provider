@@ -121,3 +121,31 @@ resource "globalscapeeft_event_rule" "auto_cleanup" {
 ## Examples
 
 See the `examples/` directory for copy/paste ready snippets covering provider configuration, data sources, and resources.
+
+## Testing
+
+This provider follows the [Terraform Plugin Framework acceptance testing guidelines](https://developer.hashicorp.com/terraform/plugin/framework/acctests).
+
+### Unit tests
+
+```bash
+go test ./...
+```
+
+### Acceptance tests
+
+Acceptance tests talk to a real EFT environment. Set the following variables and run the tests with `TF_ACC=1`:
+
+```bash
+export TF_ACC=1
+export EFT_TEST_HOST="https://eft.example.com:4450/admin"
+export EFT_TEST_USERNAME="admin"
+export EFT_TEST_PASSWORD="..."
+export EFT_TEST_SITE_ID="..."          # required for site-user tests
+export EFT_TEST_AUTHTYPE="EFT"         # optional, defaults to EFT
+export EFT_TEST_INSECURE="false"       # optional, set true for self-signed certs
+
+go test ./internal/provider -run TestAcc
+```
+
+The tests will create and destroy temporary users, so run them against a non-production EFT instance when possible.

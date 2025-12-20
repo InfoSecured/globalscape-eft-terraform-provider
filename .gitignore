@@ -1,0 +1,46 @@
+# OS cruft
+.DS_Store
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+coverage.out
+
+# Editor/IDE metadata
+.idea/
+.vscode/
+*.code-workspace
+
+# Environment / secrets
+.env
+.env.*
+
+# Python helper artifacts
+__pycache__/
+*.pyc
+.venv/
+
+# Terraform local files
+**/.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+plan.out
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+terraform.d/
+
+# Go tool caches (when not explicitly pinned)
+.gocache/
+.gomodcache/
