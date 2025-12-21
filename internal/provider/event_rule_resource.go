@@ -92,10 +92,24 @@ func (r *eventRuleResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	var err error
+	attrRaw, err = sanitizeSensitiveFields(attrRaw)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to sanitize attributes_json", err.Error())
+		return
+	}
+
 	relRaw, diags := parseOptionalJSON(plan.RelationshipsJSON)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if len(relRaw) > 0 {
+		relRaw, err = sanitizeSensitiveFields(relRaw)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to sanitize relationships_json", err.Error())
+			return
+		}
 	}
 
 	request := client.EventRuleRequestData{
@@ -163,10 +177,24 @@ func (r *eventRuleResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
+	var err error
+	attrRaw, err = sanitizeSensitiveFields(attrRaw)
+	if err != nil {
+		resp.Diagnostics.AddError("Failed to sanitize attributes_json", err.Error())
+		return
+	}
+
 	relRaw, diags := parseOptionalJSON(plan.RelationshipsJSON)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+	if len(relRaw) > 0 {
+		relRaw, err = sanitizeSensitiveFields(relRaw)
+		if err != nil {
+			resp.Diagnostics.AddError("Failed to sanitize relationships_json", err.Error())
+			return
+		}
 	}
 
 	request := client.EventRuleRequestData{
@@ -216,7 +244,13 @@ func setEventRuleStateFromAPI(rule *client.EventRule, model *eventRuleResourceMo
 
 	model.ID = types.StringValue(rule.ID)
 
-	attrs, err := normalizeRawJSON(rule.Attributes)
+	sanitizedAttrs, err := sanitizeSensitiveFields(rule.Attributes)
+	if err != nil {
+		diags.AddError("Failed to sanitize event rule attributes", err.Error())
+		return diags
+	}
+
+	attrs, err := normalizeRawJSON(sanitizedAttrs)
 	if err != nil {
 		diags.AddError("Failed to normalize event rule attributes", err.Error())
 		return diags
@@ -224,7 +258,13 @@ func setEventRuleStateFromAPI(rule *client.EventRule, model *eventRuleResourceMo
 	model.AttributesJSON = types.StringValue(attrs)
 
 	if len(rule.Relationships) > 0 {
-		relationships, err := normalizeRawJSON(rule.Relationships)
+		sanitizedRelationships, err := sanitizeSensitiveFields(rule.Relationships)
+		if err != nil {
+			diags.AddError("Failed to sanitize event rule relationships", err.Error())
+			return diags
+		}
+
+		relationships, err := normalizeRawJSON(sanitizedRelationships)
 		if err != nil {
 			diags.AddError("Failed to normalize event rule relationships", err.Error())
 			return diags
@@ -269,6 +309,49 @@ func parseOptionalJSON(value types.String) (json.RawMessage, diag.Diagnostics) {
 		return nil, diag.Diagnostics{diag.NewErrorDiagnostic("Invalid JSON", err.Error())}
 	}
 	return raw, nil
+}
+
+var sensitiveAttributes = []string{"password", "passphrase"}
+
+func sanitizeSensitiveFields(raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 {
+		return raw, nil
+	}
+
+	var data interface{}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, err
+	}
+
+	sanitizeRecursive(data)
+	return json.Marshal(data)
+}
+
+func sanitizeRecursive(value interface{}) {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		for key := range v {
+			if isSensitiveKey(key) {
+				delete(v, key)
+				continue
+			}
+			sanitizeRecursive(v[key])
+		}
+	case []interface{}:
+		for i := range v {
+			sanitizeRecursive(v[i])
+		}
+	}
+}
+
+func isSensitiveKey(key string) bool {
+	lowerKey := strings.ToLower(key)
+	for _, sensitive := range sensitiveAttributes {
+		if lowerKey == sensitive {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeRawJSON(raw json.RawMessage) (string, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/InfoSecured/globalscape-eft-terraform-provider/internal/client"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -11,6 +12,7 @@ import (
 
 var _ resource.Resource = &serverSMTPResource{}
 var _ resource.ResourceWithConfigure = &serverSMTPResource{}
+var _ resource.ResourceWithImportState = &serverSMTPResource{}
 
 func NewServerSMTPResource() resource.Resource {
 	return &serverSMTPResource{}
@@ -128,6 +130,10 @@ func (r *serverSMTPResource) Update(ctx context.Context, req resource.UpdateRequ
 
 func (r *serverSMTPResource) Delete(ctx context.Context, _ resource.DeleteRequest, resp *resource.DeleteResponse) {
 	resp.State.RemoveResource(ctx)
+}
+
+func (r *serverSMTPResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), req.ID)...)
 }
 
 func (m *serverSMTPResourceModel) toAPIModel() client.SMTPSettings {
