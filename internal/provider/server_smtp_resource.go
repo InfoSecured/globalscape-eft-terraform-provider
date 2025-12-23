@@ -7,6 +7,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -45,11 +47,24 @@ func (r *serverSMTPResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Server identifier.",
 				Computed:            true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
-			"login": schema.StringAttribute{Optional: true},
+			"login": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
 			"password": schema.StringAttribute{
 				Optional:  true,
+				Computed:  true,
 				Sensitive: true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"port":               schema.Int64Attribute{Required: true},
 			"sender_address":     schema.StringAttribute{Required: true},
@@ -89,12 +104,23 @@ func (r *serverSMTPResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, fromServerToSMTPModel(server))...)
+	// For singleton resource, use a fixed ID and preserve password from plan (write-only field)
+	newState := fromServerToSMTPModel(server)
+	newState.ID = types.StringValue("1")
+	newState.Password = plan.Password
+	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }
 
-func (r *serverSMTPResource) Read(ctx context.Context, _ resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *serverSMTPResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	if r.client == nil {
 		resp.Diagnostics.AddError("Unconfigured client", "the provider client was not initialized")
+		return
+	}
+
+	// Get current state to preserve ID and password
+	var state serverSMTPResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
 		return
 	}
 
@@ -104,7 +130,11 @@ func (r *serverSMTPResource) Read(ctx context.Context, _ resource.ReadRequest, r
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, fromServerToSMTPModel(server))...)
+	// Update state from API but preserve ID and password (API doesn't return password)
+	newState := fromServerToSMTPModel(server)
+	newState.ID = state.ID
+	newState.Password = state.Password // Preserve password from prior state (write-only field)
+	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }
 
 func (r *serverSMTPResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -125,7 +155,11 @@ func (r *serverSMTPResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	resp.Diagnostics.Append(resp.State.Set(ctx, fromServerToSMTPModel(server))...)
+	// For singleton resource, preserve ID and password from plan (password is write-only)
+	newState := fromServerToSMTPModel(server)
+	newState.ID = plan.ID
+	newState.Password = plan.Password
+	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }
 
 func (r *serverSMTPResource) Delete(ctx context.Context, _ resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -167,7 +201,7 @@ func fromServerToSMTPModel(server *client.Server) *serverSMTPResourceModel {
 	return &serverSMTPResourceModel{
 		ID:                types.StringValue(server.ID),
 		Login:             types.StringValue(server.Attributes.SMTP.Login),
-		Password:          types.StringNull(), // Don't store password in state for security
+		// Password is not set here - it's preserved from prior state in Read method (write-only field)
 		Port:              types.Int64Value(server.Attributes.SMTP.Port),
 		SenderAddress:     types.StringValue(server.Attributes.SMTP.SenderAddress),
 		SenderName:        types.StringValue(server.Attributes.SMTP.SenderName),

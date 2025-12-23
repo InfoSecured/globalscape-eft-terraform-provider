@@ -1,6 +1,6 @@
 module github.com/InfoSecured/globalscape-eft-terraform-provider
 
-go 1.23
+go 1.24.0
 
 require (
 	github.com/hashicorp/terraform-plugin-framework v1.17.0
