@@ -354,7 +354,14 @@ func parseOptionalJSON(value types.String) (json.RawMessage, diag.Diagnostics) {
 	return raw, nil
 }
 
-var sensitiveAttributes = []string{"password", "passphrase"}
+var sensitiveAttributes = []string{
+	"password",
+	"passphrase",
+	"pgpsdaspassword",
+	"secret",
+	"secretkey",
+	"sharedsecret",
+}
 
 func sanitizeSensitiveFields(raw json.RawMessage) (json.RawMessage, error) {
 	if len(raw) == 0 {

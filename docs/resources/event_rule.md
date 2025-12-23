@@ -9,7 +9,9 @@ description: |-
 This resource creates, updates, and deletes event rules for a site using the `/admin/v2/sites/{siteId}/event-rules` REST endpoints. It exposes the REST `attributes` and `relationships` bodies as JSON strings so you can paste definitions straight from the EFT API reference or an existing rule.
 
 **Important Notes:**
-- Sensitive fields (passwords, passphrases) in the JSON are automatically sanitized and not stored in Terraform state for security.
+- **Sensitive Field Sanitization**: The following fields are automatically sanitized and not stored in Terraform state for security: `password`, `passphrase`, `pgpsdaspassword`, `secret`, `secretkey`, and `sharedsecret`.
+  - When you create or update rules with these fields, they are sent to the EFT API but removed from state after the operation completes.
+  - For existing event rules (upgraded from a previous provider version or imported), sensitive fields will be removed from state on the next `terraform plan` or `terraform apply`. This is expected behavior and does not affect the actual event rule configuration on the EFT server.
 - The JSON is normalized when stored in state, so formatting differences are expected.
 
 ## Example Usage
