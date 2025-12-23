@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/InfoSecured/globalscape-eft-terraform-provider/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -13,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 )
 
 var _ resource.Resource = &eventRuleResource{}
@@ -28,19 +30,28 @@ type eventRuleResource struct {
 }
 
 type eventRuleResourceModel struct {
-	ID                types.String `tfsdk:"id"`
-	SiteID            types.String `tfsdk:"site_id"`
-	AttributesJSON    types.String `tfsdk:"attributes_json"`
-	RelationshipsJSON types.String `tfsdk:"relationships_json"`
+	ID                types.String   `tfsdk:"id"`
+	SiteID            types.String   `tfsdk:"site_id"`
+	AttributesJSON    types.String   `tfsdk:"attributes_json"`
+	RelationshipsJSON types.String   `tfsdk:"relationships_json"`
+	Timeouts          timeouts.Value `tfsdk:"timeouts"`
 }
 
 func (r *eventRuleResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_event_rule"
 }
 
-func (r *eventRuleResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *eventRuleResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages Globalscape EFT event rules via the REST API. The attributes and relationships payloads are provided as JSON strings.",
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Read:   true,
+				Update: true,
+				Delete: true,
+			}),
+		},
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -85,6 +96,14 @@ func (r *eventRuleResource) Create(ctx context.Context, req resource.CreateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	createTimeout, diags := plan.Timeouts.Create(ctx, 5*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
 
 	attrRaw, diags := parseJSON(plan.AttributesJSON)
 	resp.Diagnostics.Append(diags...)
@@ -146,6 +165,14 @@ func (r *eventRuleResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
+	readTimeout, diags := state.Timeouts.Read(ctx, 5*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
+
 	rule, err := r.client.GetEventRule(ctx, state.SiteID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read event rule", err.Error())
@@ -170,6 +197,14 @@ func (r *eventRuleResource) Update(ctx context.Context, req resource.UpdateReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	updateTimeout, diags := plan.Timeouts.Update(ctx, 5*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
 
 	attrRaw, diags := parseJSON(plan.AttributesJSON)
 	resp.Diagnostics.Append(diags...)
@@ -230,6 +265,14 @@ func (r *eventRuleResource) Delete(ctx context.Context, req resource.DeleteReque
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, 5*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	if err := r.client.DeleteEventRule(ctx, state.SiteID.ValueString(), state.ID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Failed to delete event rule", err.Error())

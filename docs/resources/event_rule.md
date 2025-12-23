@@ -8,6 +8,10 @@ description: |-
 
 This resource creates, updates, and deletes event rules for a site using the `/admin/v2/sites/{siteId}/event-rules` REST endpoints. It exposes the REST `attributes` and `relationships` bodies as JSON strings so you can paste definitions straight from the EFT API reference or an existing rule.
 
+**Important Notes:**
+- Sensitive fields (passwords, passphrases) in the JSON are automatically sanitized and not stored in Terraform state for security.
+- The JSON is normalized when stored in state, so formatting differences are expected.
+
 ## Example Usage
 
 ```hcl
@@ -48,6 +52,26 @@ terraform import globalscapeeft_event_rule.example 5ceae6e3-11b1-40c6-b4e4-3078a
 ### Optional
 
 - `relationships_json` (String) JSON document for the `relationships` block, when needed.
+
+### Timeouts
+
+This resource supports customizable timeouts for operations:
+- `create` - Default: 5 minutes
+- `read` - Default: 5 minutes
+- `update` - Default: 5 minutes
+- `delete` - Default: 5 minutes
+
+Example:
+```hcl
+resource "globalscapeeft_event_rule" "timer" {
+  # ... other configuration ...
+
+  timeouts {
+    create = "10m"
+    update = "10m"
+  }
+}
+```
 
 ### Read-only
 

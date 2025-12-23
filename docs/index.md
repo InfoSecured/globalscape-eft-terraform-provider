@@ -23,11 +23,11 @@ provider "globalscapeeft" {
 
 ## Schema
 
-- `host` (String, Required) Admin API base URL including the `/admin` suffix.
+- `host` (String, Required) Admin API base URL including the `/admin` suffix. Must use `http://` or `https://` scheme.
 - `username` (String, Required) Admin account username.
 - `password` (String, Required, Sensitive) Admin account password.
 - `auth_type` (String, Optional) Authentication realm. Defaults to `EFT`.
-- `insecure_skip_verify` (Boolean, Optional) Skip TLS verification when connecting to EFT.
+- `insecure_skip_verify` (Boolean, Optional) Skip TLS verification when connecting to EFT. Useful for lab systems with self-signed certificates.
 
 ## Supported Resources
 

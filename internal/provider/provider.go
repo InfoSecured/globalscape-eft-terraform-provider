@@ -91,8 +91,17 @@ func (p *globalscapeProvider) Configure(ctx context.Context, req provider.Config
 		return
 	}
 
-	if _, err := url.Parse(host); err != nil {
+	parsedURL, err := url.Parse(host)
+	if err != nil {
 		resp.Diagnostics.AddError("Invalid host", err.Error())
+		return
+	}
+
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		resp.Diagnostics.AddError(
+			"Invalid host URL scheme",
+			"Host must use http:// or https:// scheme. Got: "+parsedURL.Scheme,
+		)
 		return
 	}
 

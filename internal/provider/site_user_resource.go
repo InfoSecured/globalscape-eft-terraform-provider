@@ -2,9 +2,12 @@ package provider
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"github.com/InfoSecured/globalscape-eft-terraform-provider/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -12,10 +15,12 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
 )
 
 var _ resource.Resource = &siteUserResource{}
 var _ resource.ResourceWithConfigure = &siteUserResource{}
+var _ resource.ResourceWithImportState = &siteUserResource{}
 
 func NewSiteUserResource() resource.Resource {
 	return &siteUserResource{}
@@ -26,17 +31,18 @@ type siteUserResource struct {
 }
 
 type siteUserResourceModel struct {
-	ID                types.String `tfsdk:"id"`
-	SiteID            types.String `tfsdk:"site_id"`
-	LoginName         types.String `tfsdk:"login_name"`
-	Password          types.String `tfsdk:"password"`
-	PasswordType      types.String `tfsdk:"password_type"`
-	DisplayName       types.String `tfsdk:"display_name"`
-	Email             types.String `tfsdk:"email"`
-	AccountEnabled    types.String `tfsdk:"account_enabled"`
-	HomeFolderPath    types.String `tfsdk:"home_folder_path"`
-	HomeFolderEnabled types.String `tfsdk:"home_folder_enabled"`
-	HomeFolderRoot    types.String `tfsdk:"home_folder_root"`
+	ID                types.String   `tfsdk:"id"`
+	SiteID            types.String   `tfsdk:"site_id"`
+	LoginName         types.String   `tfsdk:"login_name"`
+	Password          types.String   `tfsdk:"password"`
+	PasswordType      types.String   `tfsdk:"password_type"`
+	DisplayName       types.String   `tfsdk:"display_name"`
+	Email             types.String   `tfsdk:"email"`
+	AccountEnabled    types.String   `tfsdk:"account_enabled"`
+	HomeFolderPath    types.String   `tfsdk:"home_folder_path"`
+	HomeFolderEnabled types.String   `tfsdk:"home_folder_enabled"`
+	HomeFolderRoot    types.String   `tfsdk:"home_folder_root"`
+	Timeouts          timeouts.Value `tfsdk:"timeouts"`
 }
 
 var yesNoInherit = []string{"inherit", "yes", "no"}
@@ -45,9 +51,17 @@ func (r *siteUserResource) Metadata(_ context.Context, req resource.MetadataRequ
 	resp.TypeName = req.ProviderTypeName + "_site_user"
 }
 
-func (r *siteUserResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *siteUserResource) Schema(ctx context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages Globalscape EFT users for a specific site.",
+		Blocks: map[string]schema.Block{
+			"timeouts": timeouts.Block(ctx, timeouts.Opts{
+				Create: true,
+				Read:   true,
+				Update: true,
+				Delete: true,
+			}),
+		},
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:            true,
@@ -68,12 +82,15 @@ func (r *siteUserResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 				},
 			},
 			"password": schema.StringAttribute{
-				MarkdownDescription: "Password for EFT local accounts.",
+				MarkdownDescription: "Password for EFT local accounts. Required when password_type is not 'Disabled'.",
 				Optional:            true,
 				Sensitive:           true,
+				Validators: []validator.String{
+					stringvalidator.AlsoRequires(path.MatchRoot("password_type")),
+				},
 			},
 			"password_type": schema.StringAttribute{
-				MarkdownDescription: "Password type as expected by EFT (for example `Default` or `Disabled`).",
+				MarkdownDescription: "Password type as expected by EFT (for example `Default` or `Disabled`). When set to 'Default', a password must be provided.",
 				Optional:            true,
 				Computed:            true,
 				Default:             stringdefault.StaticString("Default"),
@@ -143,6 +160,14 @@ func (r *siteUserResource) Create(ctx context.Context, req resource.CreateReques
 		return
 	}
 
+	createTimeout, diags := plan.Timeouts.Create(ctx, 5*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, createTimeout)
+	defer cancel()
+
 	attrs := plan.toAPIModel()
 
 	user, err := r.client.CreateSiteUser(ctx, plan.SiteID.ValueString(), attrs)
@@ -174,6 +199,14 @@ func (r *siteUserResource) Read(ctx context.Context, req resource.ReadRequest, r
 		return
 	}
 
+	readTimeout, diags := state.Timeouts.Read(ctx, 5*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
+
 	user, err := r.client.GetSiteUser(ctx, state.SiteID.ValueString(), state.ID.ValueString())
 	if err != nil {
 		resp.Diagnostics.AddError("Failed to read user", err.Error())
@@ -199,6 +232,14 @@ func (r *siteUserResource) Update(ctx context.Context, req resource.UpdateReques
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	updateTimeout, diags := plan.Timeouts.Update(ctx, 5*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, updateTimeout)
+	defer cancel()
 
 	user, err := r.client.UpdateSiteUser(ctx, plan.SiteID.ValueString(), plan.ID.ValueString(), plan.toAPIModel())
 	if err != nil {
@@ -226,12 +267,31 @@ func (r *siteUserResource) Delete(ctx context.Context, req resource.DeleteReques
 		return
 	}
 
+	deleteTimeout, diags := state.Timeouts.Delete(ctx, 5*time.Minute)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
+	defer cancel()
+
 	if err := r.client.DeleteSiteUser(ctx, state.SiteID.ValueString(), state.ID.ValueString()); err != nil {
 		resp.Diagnostics.AddError("Failed to delete user", err.Error())
 		return
 	}
 
 	resp.State.RemoveResource(ctx)
+}
+
+func (r *siteUserResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	parts := strings.Split(req.ID, "/")
+	if len(parts) != 2 {
+		resp.Diagnostics.AddError("Invalid import identifier", "Expected identifier in the form <site_id>/<user_id>")
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("site_id"), parts[0])...)
+	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), parts[1])...)
 }
 
 func (m *siteUserResourceModel) toAPIModel() client.UserAttributes {

@@ -40,7 +40,7 @@ func (r *serverSMTPResource) Metadata(_ context.Context, req resource.MetadataRe
 
 func (r *serverSMTPResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages Globalscape EFT SMTP configuration.",
+		MarkdownDescription: "Manages Globalscape EFT SMTP configuration. Note: SMTP settings are part of the server configuration and cannot be deleted. Destroying this resource will only remove it from Terraform state.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Server identifier.",
@@ -129,6 +129,10 @@ func (r *serverSMTPResource) Update(ctx context.Context, req resource.UpdateRequ
 }
 
 func (r *serverSMTPResource) Delete(ctx context.Context, _ resource.DeleteRequest, resp *resource.DeleteResponse) {
+	// SMTP settings are part of the server configuration and cannot be deleted via the API.
+	// Removing the resource from Terraform state only. The SMTP configuration will remain
+	// on the EFT server. To clear SMTP settings, update the resource with empty/default values
+	// before destroying.
 	resp.State.RemoveResource(ctx)
 }
 
@@ -163,7 +167,7 @@ func fromServerToSMTPModel(server *client.Server) *serverSMTPResourceModel {
 	return &serverSMTPResourceModel{
 		ID:                types.StringValue(server.ID),
 		Login:             types.StringValue(server.Attributes.SMTP.Login),
-		Password:          types.StringValue(server.Attributes.SMTP.Password),
+		Password:          types.StringNull(), // Don't store password in state for security
 		Port:              types.Int64Value(server.Attributes.SMTP.Port),
 		SenderAddress:     types.StringValue(server.Attributes.SMTP.SenderAddress),
 		SenderName:        types.StringValue(server.Attributes.SMTP.SenderName),
