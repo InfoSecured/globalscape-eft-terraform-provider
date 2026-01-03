@@ -1,4 +1,4 @@
-module github.com/InfoSecured/globalscape-eft-terraform-provider
+module github.com/WeaveHubHQ/globalscape-eft-terraform-provider
 
 go 1.24.0
 
